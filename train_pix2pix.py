@@ -10,15 +10,16 @@ from sampler import Sampler, augmentImage, colorize
 
 def parse():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--path',type=str)
+    parser.add_argument('--path_h5',type=str)
+    parser.add_argument('--path_trn',type=str)
     parser.add_argument('--path_val',type=str)
     parser.add_argument('--output_path',type=str,default=".")
     return parser.parse_args()
 
 args = parse()
 
-TRN_SIS = Sampler(args.path)
-VAL_SIS = Sampler(args.path)
+TRN_SIS = Sampler(args.path_h5, args.path_trn)
+VAL_SIS = Sampler(args.path_h5, args.path_val)
 
 batch_size = 64
 max_steps = TRN_SIS.num_samples//batch_size
@@ -28,14 +29,11 @@ EPOCHS = 300
 train_ds = TRN_SIS.getDataset()
 val_ds = VAL_SIS.getDataset()
 
-#train_ds = train_ds.cache('/home/gpu_user/antoine/dentist/train-cache-v23')
 train_ds = train_ds.prefetch(1000)
 train_ds = train_ds.map(lambda x, y: augmentImage(x, y), num_parallel_calls=10)
 train_ds = train_ds.shuffle(1000)
 train_ds = train_ds.batch(64)
 
-
-#val_ds = val_ds.cache('/home/gpu_user/antoine/dentist/val-cache-v23')
 val_ds = val_ds.prefetch(1000)
 val_ds = val_ds.batch(64)
 
