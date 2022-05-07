@@ -1,0 +1,6 @@
+**.swp
+**.swo
+**/__pycache__
+**.pkl
+**.hdf5
+data
