@@ -1,13 +1,13 @@
 # This repository aims at teaching GANs to increase the resolution of DEMs (Digital Elevation Maps) leveraging satellite imagery
 
 ## Downloadng and formating the data
-First, to download the data, run the following script. These files will take about 18Gb:\\
+First, to download the data, run the following script. These files will take about 18Gb:\
 `./get_data.sh` 
 
-The data then needs to be reformated. These files will take an additional 3.6Gb:\\
+The data then needs to be reformated. These files will take an additional 3.6Gb:\
 `python3 tile_WAC_MOS.py --data_path data`
 
-The files then need to be formated into an h5 format. This will take an additional 30Gb:\\
+The files then need to be formated into an h5 format. This will take an additional 30Gb:\
 `python3 make_h5.py --data_path data --output .`
 
 ## Train pix2pix
