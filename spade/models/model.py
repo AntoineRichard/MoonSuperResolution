@@ -18,6 +18,7 @@ from ..losses import (
     DiscriminatorLoss,
     FeatureMatchingLoss,
     VGGFeatureMatchingLoss,
+    ConsistencyLoss
 )
 
 class GauGAN(Model):
@@ -29,6 +30,7 @@ class GauGAN(Model):
         feature_loss_coeff=10,
         vgg_feature_loss_coeff=0.1,
         kl_divergence_loss_coeff=0.1,
+        consistency_loss_coeff=2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -41,6 +43,7 @@ class GauGAN(Model):
         self.feature_loss_coeff = feature_loss_coeff
         self.vgg_feature_loss_coeff = vgg_feature_loss_coeff
         self.kl_divergence_loss_coeff = kl_divergence_loss_coeff
+        self.consistency_loss_coeff = consistency_loss_coeff
 
         self.discriminator = build_discriminator(
             self.source_shape,
@@ -67,12 +70,14 @@ class GauGAN(Model):
         self.feat_loss_val = tf.keras.metrics.Mean(name="feat_loss")
         self.vgg_loss_val = tf.keras.metrics.Mean(name="vgg_loss")
         self.kl_loss_val = tf.keras.metrics.Mean(name="kl_loss")
+        self.cons_loss_val = tf.keras.metrics.Mean(name="cons_loss")
 
         self.disc_loss_trn = tf.keras.metrics.Mean(name="disc_loss")
         self.gen_loss_trn = tf.keras.metrics.Mean(name="gen_loss")
         self.feat_loss_trn = tf.keras.metrics.Mean(name="feat_loss")
         self.vgg_loss_trn = tf.keras.metrics.Mean(name="vgg_loss")
         self.kl_loss_trn = tf.keras.metrics.Mean(name="kl_loss")
+        self.cons_loss_trn = tf.keras.metrics.Mean(name="cons_loss")
 
     @property
     def val_metrics(self):
@@ -82,6 +87,7 @@ class GauGAN(Model):
             self.feat_loss_val,
             self.vgg_loss_val,
             self.kl_loss_val,
+            self.cons_loss_val,
         ]
     
     @property
@@ -92,6 +98,7 @@ class GauGAN(Model):
             self.feat_loss_trn,
             self.vgg_loss_trn,
             self.kl_loss_trn,
+            self.cons_loss_trn,
         ]
 
     def build_combined_generator(self):
@@ -120,6 +127,7 @@ class GauGAN(Model):
         self.discriminator_optimizer = optimizers.Adam(
             disc_lr, beta_1=0.0, beta_2=0.999
         )
+        self.consistency_loss = ConsistencyLoss()
         self.discriminator_loss = DiscriminatorLoss()
         self.feature_matching_loss = FeatureMatchingLoss()
         self.vgg_loss = VGGFeatureMatchingLoss()
@@ -166,7 +174,8 @@ class GauGAN(Model):
             feature_loss = self.feature_loss_coeff * self.feature_matching_loss(
                 real_d_output, fake_d_output
             )
-            total_loss = g_loss + kl_loss + vgg_loss + feature_loss
+            consistency_loss = self.consistency_loss_coeff * self.consistency_loss(fake_image, target)
+            total_loss = g_loss + kl_loss + vgg_loss + feature_loss + consistency_loss
 
         all_trainable_variables = (
             self.combined_model.trainable_variables + self.encoder.trainable_variables
@@ -176,13 +185,13 @@ class GauGAN(Model):
         self.generator_optimizer.apply_gradients(
             zip(gradients, all_trainable_variables,)
         )
-        return total_loss, feature_loss, vgg_loss, kl_loss, fake_image
+        return total_loss, feature_loss, vgg_loss, kl_loss, consistency_loss, fake_image
 
     def train_step(self, source, target):
         discriminator_loss = self.train_discriminator(
             source, target
         )
-        (generator_loss, feature_loss, vgg_loss, kl_loss, fake_image) = self.train_generator(
+        (generator_loss, feature_loss, vgg_loss, kl_loss, cons_loss, fake_image) = self.train_generator(
             source, target
         )
 
@@ -192,6 +201,7 @@ class GauGAN(Model):
         self.feat_loss_trn.update_state(feature_loss)
         self.vgg_loss_trn.update_state(vgg_loss)
         self.kl_loss_trn.update_state(kl_loss)
+        self.cons_loss_val.update_state(cons_loss)
         results = {m.name: m.result() for m in self.trn_metrics}
         return results, fake_image
 
@@ -222,7 +232,8 @@ class GauGAN(Model):
         feature_loss = self.feature_loss_coeff * self.feature_matching_loss(
             real_d_output, fake_d_output
         )
-        total_generator_loss = g_loss + kl_loss + vgg_loss + feature_loss
+        consistency_loss = self.consistency_loss_coeff * self.consistency_loss(fake_image, target)
+        total_generator_loss = g_loss + kl_loss + vgg_loss + feature_loss + consistency_loss
 
         # Report progress.
         self.disc_loss_val.update_state(total_discriminator_loss)
@@ -230,6 +241,7 @@ class GauGAN(Model):
         self.feat_loss_val.update_state(feature_loss)
         self.vgg_loss_val.update_state(vgg_loss)
         self.kl_loss_val.update_state(kl_loss)
+        self.cons_loss_val.update_state(consistency_loss)
         results = {m.name: m.result() for m in self.val_metrics}
         return results, fake_images
 

@@ -30,17 +30,13 @@ PRINT_STEP = max_steps//10
 train_ds = TRN_SIS.getDataset()
 val_ds = VAL_SIS.getDataset()
 
-#train_ds = train_ds.cache('/home/gpu_user/antoine/dentist/train-cache-v23')
 train_ds = train_ds.prefetch(1000)
 train_ds = train_ds.map(lambda x, y: augmentImage(x, y), num_parallel_calls=10)
 train_ds = train_ds.shuffle(1000)
 train_ds = train_ds.batch(BATCH_SIZE)
 
-
-#val_ds = val_ds.cache('/home/gpu_user/antoine/dentist/val-cache-v23')
 val_ds = val_ds.prefetch(1000)
 val_ds = val_ds.batch(BATCH_SIZE)
-
 
 gaugan = GauGAN(256, BATCH_SIZE, latent_dim=256)
 gaugan.compile()
@@ -66,8 +62,8 @@ for epoch in range(EPOCHS):
         continue
     metrics, y_ = gaugan.train_step(x_train, y_train)
     if step%PRINT_STEP == 0:
-      template = 'Epoch {} {}%, Gen-Loss: {}, Disc-Loss: {}, Feat-Loss: {}, KL-Loss: {}, VGG-Loss: {}'
-      print (template.format(epoch+1,int(100*step/max_steps),metrics['gen_loss'], metrics['disc_loss'], metrics['feat_loss'],metrics['kl_loss'],metrics['vgg_loss']))
+      template = 'Train epoch {} {}%, '+', '.join([metric+': {}'for metric in metrics.keys()])+'.'
+      print (template.format(epoch+1,int(100*step/max_steps),*metrics.values()))
       with train_writer.as_default():
         hm_in   = tf.map_fn(lambda img: colorize(img, cmap='jet'), tf.expand_dims(x_train[:,:,:,1],-1))
         hm_pred = tf.map_fn(lambda img: colorize(img, cmap='jet'), y_)
@@ -87,8 +83,8 @@ for epoch in range(EPOCHS):
     y_val = y_train
     metrics, y_ = gaugan.val_step(x_val, y_val)
 
-  template = 'Epoch {}, Gen-Loss: {}, Disc-Loss: {}, Feat-Loss: {}, KL-Loss: {}, VGG-Loss: {}'
-  print (template.format(epoch+1,metrics['gen_loss'], metrics['disc_loss'], metrics['feat_loss'],metrics['kl_loss'],metrics['vgg_loss']))
+  template = 'Valid epoch {}, '+', '.join([metric+': {}'for metric in metrics.keys()])+'.'
+  print (template.format(epoch+1,*metrics.values()))
   with val_writer.as_default():
     hm_in   = tf.map_fn(lambda img: colorize(img, cmap='jet'), tf.expand_dims(x_val[:,:,:,1],-1))
     hm_pred = tf.map_fn(lambda img: colorize(img, cmap='jet'), y_)

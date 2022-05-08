@@ -10,6 +10,17 @@ def kl_divergence_loss(mean, variance):
     return -0.5 * tf.reduce_sum(1 + variance - tf.square(mean) - tf.exp(variance))
 
 
+class ConsistencyLoss(losses.Loss):
+    def __init__(self, upscaling=10, **kwargs):
+        super().__init__(**kwargs)
+        self.mse = losses.MeanSquaredError()
+        # Using an average pool to downscale the image. Not sure if tf.image allows for gradient propagation.
+        self.pool = tf.keras.layers.AveragePooling2D(pool_size=(upscaling, upscaling),strides=upscaling,padding='valid')
+
+    def call(self, y_true, y_pred):
+        return self.mse(self.pool(y_true), self.pool(y_pred))
+
+
 class FeatureMatchingLoss(losses.Loss):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
