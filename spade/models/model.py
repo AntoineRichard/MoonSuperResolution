@@ -245,9 +245,10 @@ class GauGAN(Model):
         results = {m.name: m.result() for m in self.val_metrics}
         return results, fake_images
 
-    def call(self, inputs):
-        latent_vectors, labels = inputs
-        return self.generator([latent_vectors, labels])
+    def call(self, source):
+        mean, variance = self.encoder(source)
+        latent_vector = self.sampler([mean, variance])
+        return self.generator([latent_vector, source])
 
     def save(
         self,
@@ -277,10 +278,20 @@ class GauGAN(Model):
             options=options,
             save_traces=save_traces,
         )
+        self.encoder.save(
+            os.path.join(filepath, "encoder"),
+            overwrite=overwrite,
+            include_optimizer=include_optimizer,
+            save_format=save_format,
+            signatures=signatures,
+            options=options,
+            save_traces=save_traces,
+        )
 
-    def load(self, generator_filepath: str, discriminator_filepath: str):
+    def load(self, generator_filepath: str, discriminator_filepath: str, encoder_filepath: str):
         self.generator = models.load_model(generator_filepath)
         self.discriminator = models.load_model(discriminator_filepath)
+        self.encoder = models.load_model(encoder_filepath)
 
     def save_weights(self, filepath, overwrite=True, save_format=None, options=None):
         self.generator.save_weights(
