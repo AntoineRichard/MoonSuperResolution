@@ -201,7 +201,7 @@ class GauGAN(Model):
         self.feat_loss_trn.update_state(feature_loss)
         self.vgg_loss_trn.update_state(vgg_loss)
         self.kl_loss_trn.update_state(kl_loss)
-        self.cons_loss_val.update_state(cons_loss)
+        self.cons_loss_trn.update_state(cons_loss)
         results = {m.name: m.result() for m in self.trn_metrics}
         return results, fake_image
 
