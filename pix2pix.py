@@ -32,6 +32,35 @@ class Pix2Pix:
         self.discriminator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
         self.loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
+        self.disc_loss_val = tf.keras.metrics.Mean(name="disc_loss")
+        self.gen_loss_val = tf.keras.metrics.Mean(name="gen_loss")
+        self.gan_loss_val = tf.keras.metrics.Mean(name="gan_loss")
+        self.l1_loss_val = tf.keras.metrics.Mean(name="l1_loss")
+
+        self.disc_loss_trn = tf.keras.metrics.Mean(name="disc_loss")
+        self.gen_loss_trn = tf.keras.metrics.Mean(name="gen_loss")
+        self.gan_loss_trn = tf.keras.metrics.Mean(name="gan_loss")
+        self.l1_loss_trn = tf.keras.metrics.Mean(name="l1_loss")
+
+
+    @property
+    def val_metrics(self):
+        return [
+            self.disc_loss_val,
+            self.gen_loss_val,
+            self.gan_loss_val,
+            self.l1_loss_val,
+        ]
+    
+    @property
+    def trn_metrics(self):
+        return [
+            self.disc_loss_trn,
+            self.gen_loss_trn,
+            self.gan_loss_trn,
+            self.l1_loss_trn,
+        ]
+
     @staticmethod
     def downsample(filters, size, apply_batchnorm=True):
         initializer = tf.random_normal_initializer(0., 0.02)
@@ -123,7 +152,13 @@ class Pix2Pix:
         discriminator_gradients = disc_tape.gradient(disc_loss, self.discriminator.trainable_variables)
         self.generator_optimizer.apply_gradients(zip(generator_gradients, self.generator.trainable_variables))
         self.discriminator_optimizer.apply_gradients(zip(discriminator_gradients, self.discriminator.trainable_variables))
-        return gen_output, gen_total_loss, disc_loss
+        # Report progress.
+        self.disc_loss_trn.update_state(disc_loss)
+        self.l1_loss_trn.update_state(gen_l1_loss)
+        self.gan_loss_trn.update_state(gen_gan_loss)
+        self.gen_loss_trn.update_state(gen_total_loss)
+        results = {m.name: m.result() for m in self.train_metrics}
+        return gen_output, results()
 
     @tf.function
     def val_step(self, input_image, target):
@@ -132,4 +167,10 @@ class Pix2Pix:
         disc_generated_output = self.discriminator([input_image, gen_output], training=True)
         gen_total_loss, gen_gan_loss, gen_l1_loss = self.generator_loss(disc_generated_output, gen_output, target)
         disc_loss = self.discriminator_loss(disc_real_output, disc_generated_output)
+        # Report progress.
+        self.disc_loss_val.update_state(disc_loss)
+        self.l1_loss_val.update_state(gen_l1_loss)
+        self.gan_loss_val.update_state(gen_gan_loss)
+        self.gen_loss_val.update_state(gen_total_loss)
+        results = {m.name: m.result() for m in self.val_metrics}
         return gen_output, gen_total_loss, disc_loss

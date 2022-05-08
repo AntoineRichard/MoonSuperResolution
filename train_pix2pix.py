@@ -66,10 +66,10 @@ val_writer = tf.summary.create_file_writer(test_log_dir)
 
 for epoch in range(EPOCHS):
   for step, (x_train, y_train) in enumerate(train_ds):
-    y_, gloss, dloss = pix2pix.train_step(x_train, y_train, epoch)
+    y_, metrics = pix2pix.train_step(x_train, y_train, epoch)
     if step%PRINT_STEP == 0:
-      template = 'Epoch {} {}%, G-Loss: {}, D-Loss: {}'
-      print (template.format(epoch+1,int(100*step/max_steps),gloss, dloss))
+      template = 'Train epoch {} {}%, '+', '.join([metric+': {}'for metric in metrics.keys()])+'.'
+      print (template.format(epoch+1,int(100*step/max_steps),*metrics.values()))
       with train_writer.as_default():
         hm_in   = tf.map_fn(lambda img: colorize(img, cmap='jet'), tf.expand_dims(x_train[:,:,:,1],-1))
         hm_pred = tf.map_fn(lambda img: colorize(img, cmap='jet'), y_)
@@ -78,26 +78,26 @@ for epoch in range(EPOCHS):
         tf.summary.image('pred', hm_pred, step=epoch*max_steps+step, max_outputs=3, description=None)
         tf.summary.image('input_hmap', hm_in, step=epoch*max_steps+step, max_outputs=3, description=None)
         tf.summary.image('input_image', tf.expand_dims(x_train[:,:,:,0],-1)+0.5, step=epoch*max_steps+step, max_outputs=3, description=None)
-        tf.summary.scalar('generator loss', gloss, step = epoch*max_steps+step)
-        tf.summary.scalar('discriminator loss', dloss, step = epoch*max_steps+step)
+        for key in metrics.keys():
+            tf.summary.scalar(key, metrics[key], step = epoch*max_steps+step)
         tf.summary.flush()
 
   for step, (x_train, y_train) in enumerate(val_ds):
-    y_, vgloss, vdloss = pix2pix.val_step(x_train, y_train)
-
-  template = 'Epoch {}, G-Loss: {}, D-Loss: {}, val G-Loss: {}, val D-Loss: {}'
-  print (template.format(epoch+1, gloss, dloss, vgloss, vdloss))
+    y_, metrics = pix2pix.val_step(x_train, y_train)
+  template = 'Valid epoch {}, '+', '.join([metric+': {}'for metric in metrics.keys()])+'.'
+  print (template.format(epoch+1,*metrics.values()))
   with val_writer.as_default():
-    hm_in   = tf.map_fn(lambda img: colorize(img, cmap='jet'), tf.expand_dims(x_train[:,:,:,1],-1))
+    hm_in   = tf.map_fn(lambda img: colorize(img, cmap='jet'), tf.expand_dims(x_val[:,:,:,1],-1))
     hm_pred = tf.map_fn(lambda img: colorize(img, cmap='jet'), y_)
-    hm_true = tf.map_fn(lambda img: colorize(img, cmap='jet'), y_train)
-    tf.summary.image('GT', hm_true, step=epoch*max_steps+step, max_outputs=3, description=None)
-    tf.summary.image('pred', hm_pred, step=epoch*max_steps+step, max_outputs=3, description=None)
-    tf.summary.image('input_hmap', hm_in, step=epoch*max_steps+step, max_outputs=3, description=None)
-    tf.summary.image('input_image', tf.expand_dims(x_train[:,:,:,0],-1)+0.5, step=epoch*max_steps+step, max_outputs=3, description=None)
-    tf.summary.scalar('generator loss', vgloss, step = epoch*max_steps+step)
-    tf.summary.scalar('discriminator loss', vdloss, step = epoch*max_steps+step)
+    hm_true = tf.map_fn(lambda img: colorize(img, cmap='jet'), y_val)
+    tf.summary.image('GT', hm_true, step=epoch*max_steps+step, max_outputs=9, description=None)
+    tf.summary.image('pred', hm_pred, step=epoch*max_steps+step, max_outputs=9, description=None)
+    tf.summary.image('input_hmap', hm_in, step=epoch*max_steps+step, max_outputs=9, description=None)
+    tf.summary.image('input_image', tf.expand_dims(x_val[:,:,:,0],-1)+0.5, step=epoch*max_steps+step, max_outputs=9, description=None)
+    for key in metrics.keys():
+        tf.summary.scalar(key, metrics[key], step = epoch*max_steps+step)
     tf.summary.flush()
+
   checkpoint_g_path = os.path.join(args.output_path,'models',current_time,'Generator/epoch_'+str(epoch))
   checkpoint_d_path = os.path.join(args.output_path,'models',current_time,'Discriminator/epoch_'+str(epoch))
   pix2pix.generator.save(checkpoint_g_path)
