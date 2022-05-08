@@ -1,4 +1,4 @@
-# This repository aims at teaching GANs to increase the resolution of DEMs (Digital Elevation Maps) leveraging satellite imagery
+# This repository aims at teaching GANs to increase the resolution of Lunar DEMs (Digital Elevation Maps) leveraging satellite imagery (WAC from LRO).
 
 ## Downloadng and formating the data
 First, to download the data, run the following script. These files will take about 18Gb:\
