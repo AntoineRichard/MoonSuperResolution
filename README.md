@@ -29,3 +29,6 @@ The visualization allows to monitor the losses as well as the images generated b
 Sources:\
 Spade: https://github.com/soumik12345/tf2_gans (Adapted to our problem, fixed encoder not learning, and added a consistency loss).\
 Pix2pix: https://www.tensorflow.org/tutorials/generative/pix2pix (Reworked the network, adapted to our problem).
+
+## Assembling tiles
+The code in `test_network.py` shows how to do it. A proper implementation is underway.
