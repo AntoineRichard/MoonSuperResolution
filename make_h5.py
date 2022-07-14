@@ -3,6 +3,8 @@ import h5py
 import cv2
 import pickle
 import os
+import argparse
+
 tile_size = 1000
 tile_offset = 500
 
@@ -65,7 +67,7 @@ def parse():
 
 args = parse()
 
-h5 = h5py.File(os.path.join(args.output_path,'MoonORTO2DEM.hdf5','w'))
+h5 = h5py.File(os.path.join(args.output_path,'MoonORTO2DEM.hdf5'),'w')
 dct = {}
 for key in coord:
     ort, dem = loadPair(args.data_path, key, DEM_tiles, ORT_tiles)
