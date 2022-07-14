@@ -1,5 +1,8 @@
 import gdal
 import numpy as np
+import argparse
+import os
+
 def parse():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_path',type=str)
