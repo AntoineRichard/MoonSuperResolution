@@ -36,7 +36,7 @@ class Sampler:
             yield (img, lbl)
 
     def _getImg(self, key_dem, key_ort):
-        hw = 250+int(random.random()*500)
+        hw = 500+int(random.random()*498)
         res = 1000 - hw
         plx = int(random.random()*res)
         prx = res - plx
@@ -44,12 +44,17 @@ class Sampler:
         pry = res - ply
         raw_ort = self.h5[key_ort][plx:-prx,ply:-pry]
         raw_dem = self.h5[key_dem][plx:-prx,ply:-pry]
-        raw_ort = cv2.resize(raw_ort,(self.hw,self.hw),cv2.INTER_AREA)
-        raw_dem = cv2.resize(raw_dem,(self.hw,self.hw),cv2.INTER_AREA)
-        raw_dem = np.expand_dims(raw_dem/65535.0 - 0.5,-1)
-        smt_ort = cv2.resize(raw_dem[::10,::10],(self.hw,self.hw),cv2.INTER_CUBIC)
+        raw_dem = (raw_dem*1.0 - raw_dem.min())/(raw_dem.max() - raw_dem.min())
+        raw_ort = cv2.resize(raw_ort,(self.hw,self.hw),cv2.INTER_CUBIC)
+        raw_dem = cv2.resize(raw_dem,(self.hw,self.hw),cv2.INTER_CUBIC)
+        raw_dem = raw_dem + random.random()*np.repeat(np.expand_dims(np.arange(self.hw,dtype=np.float32),-1),self.hw,-1)/(self.hw/2.0)
+        raw_dem = raw_dem + random.random()*np.repeat(np.expand_dims(np.arange(self.hw,dtype=np.float32),0),self.hw,0)/(self.hw/2.0)
+        raw_dem = (raw_dem*1.0 - raw_dem.min())/(raw_dem.max() - raw_dem.min())
+        raw_dem = np.expand_dims(raw_dem - 0.5,-1)
+        smt_ort = cv2.resize(cv2.resize(raw_dem,(self.hw//16,self.hw//16),cv2.INTER_CUBIC),(self.hw,self.hw),cv2.INTER_CUBIC)
         raw_ort = np.expand_dims(raw_ort/255.0 - 0.5,-1)
         img = np.concatenate([raw_ort,np.expand_dims(smt_ort,-1)],-1)
+        #print(img.shape, raw_dem.shape)
         return img, raw_dem
 
 @tf.function
@@ -63,12 +68,16 @@ def randomRotate(x, y):
 def randomBrightnessContrast(x,y, max_brightness_delta=0.2, max_contrast_factor=0.3, z_offset=0.3):
     alpha = tf.random.uniform(()) * max_brightness_delta - max_brightness_delta
     beta = tf.random.uniform(()) * max_contrast_factor/2 - max_contrast_factor/2
-    ceta = tf.random.uniform(()) * z_offset/2 - z_offset/2
+    #ceta = tf.random.uniform(()) * z_offset/2 - z_offset/2
     #x = np.array(x)
     img,dem = tf.split(x,2,-1)
     img = img*(1 + alpha) + beta
-    dem = dem + ceta
-    y = y + ceta
+    #dem = dem + ceta
+    #z_off = tf.random.uniform(())*tf.repeat(tf.expand_dims(tf.range(512,dtype=tf.float32),-1),512,-1)/256.0
+    #z_off += tf.random.uniform(())*tf.repeat(tf.expand_dims(tf.range(512,dtype=tf.float32),0),512,0)/256.0
+    #dem += z_off
+    #dem = (dem - tf.reduce_min(dem))/(tf.reduce_max(dem) - tf.reduce_min(dem))
+    #y = y + ceta
     return tf.concat([img,dem],-1), y
 
 @tf.function

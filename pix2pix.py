@@ -174,3 +174,6 @@ class Pix2Pix:
         self.gen_loss_val.update_state(gen_total_loss)
         results = {m.name: m.result() for m in self.val_metrics}
         return gen_output, gen_total_loss, disc_loss
+
+    def load(self, path_gen, path_disc):
+        self.generator = models.load()

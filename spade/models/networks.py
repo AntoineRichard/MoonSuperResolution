@@ -37,8 +37,9 @@ def build_encoder(
 def build_generator(source_shape, latent_dim: int, alpha: float) -> Model:
     latent = Input(shape=(latent_dim))
     source = Input(shape=source_shape)
-    x = layers.Dense(16384)(latent)
-    x = layers.Reshape((4, 4, 1024))(x)
+    sw = source_shape[0]//2**6
+    x = layers.Dense(16*sw*sw*64)(latent)
+    x = layers.Reshape((sw, sw, 1024))(x)
     x = ResidualBlock(filters=1024, alpha=alpha)(x, source)
     x = layers.UpSampling2D((2, 2))(x)
     x = ResidualBlock(filters=1024, alpha=alpha)(x, source)
