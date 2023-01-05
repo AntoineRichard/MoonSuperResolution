@@ -6,7 +6,14 @@
 ## Requirements
 
 To run the code in this repository you first need to install GDAL. GDAL is required to generate the training dataset.
-Instructions on how to install GDAL on Ubuntu can be found here: https://mothergeo-py.readthedocs.io/en/latest/development/how-to/gdal-ubuntu-pkg.html
+To install GDAL on Ubuntu run: 
+`sudo apt-get install gdal-bin`
+`sudo apt-get install libgdal-dev`
+`version=$(gdal-config --version)`
+`python3 -m pip install gdal==$version`
+
+Or follow: https://mothergeo-py.readthedocs.io/en/latest/development/how-to/gdal-ubuntu-pkg.html
+
 
 To train/run the network, you need to install tensorflow, our code is tested against tensorflow 2.4/5. Instruction on how to install tensorflow can be found here: https://www.tensorflow.org/install
 
