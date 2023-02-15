@@ -1,31 +1,28 @@
-from osgeo import gdal 
+from osgeo import gdal
 import numpy as np 
+import argparse
 import cv2 
 import os 
 
-from matplotlib import pyplot as plt
+#from matplotlib import pyplot as plt
 
 from spade.models.model import GauGAN
 
 BATCH_SIZE = 16
 IMAGE_SIZE = 512
-STRIDE=64
+STRIDE=16
 gaugan = GauGAN(512, BATCH_SIZE, latent_dim=256)
 gaugan.compile()
-path = '/home/gpu_user/antoine/MoonProject/exp_spade/models/20220724-121426/epoch_6/'
+path = '/home/users/arichard/MoonProject/exp_spade/models/20220724-121426/epoch_6/'
 gaugan.load(path+'generator',path+'discriminator',path+'encoder')
-
-folder_path = '/home/gpu_user/antoine/MoonProject'
-map_name = 'M104318871_M104311715'
-save_path = '/home/gpu_user/antoine/MoonProject/test'
 
 class DEMSuperResolution:
     def __init__(self, model=lambda x, training=False: x, folder_path=None, map_name=None, save_path=None, image_size=256, stride=64, tile_size=1024, batch_size=64):
         self.map_name=map_name
         self.save_path=save_path
         self.folder_path = folder_path
-        self.left_image_name = self.map_name+"_DRG.tif" 
-        self.dem_name = self.map_name+"_DEM.tif" 
+        self.left_image_name = "run-DRG.tif" 
+        self.dem_name = "run-DEM.tif" 
         self.no_value = -32768.0
         self.stride = stride
         self.image_size = image_size
@@ -35,8 +32,8 @@ class DEMSuperResolution:
         self.model = model
 
     def loadImages(self):
-        img_path = os.path.join(self.folder_path, self.map_name, self.left_image_name) 
-        dem_path = os.path.join(self.folder_path, self.map_name, self.dem_name) 
+        img_path = os.path.join(self.folder_path, self.left_image_name) 
+        dem_path = os.path.join(self.folder_path, self.dem_name) 
 
         img = gdal.Open(img_path,-1) 
         self.img = np.array(img.GetRasterBand(1).ReadAsArray(), dtype=np.float32)  
@@ -142,7 +139,7 @@ class DEMSuperResolution:
         good = (votes > 0) * 1.0
         # Compute the mean and standard deviation
         mean = (tile / votes)
-        std = np.sqrt((tile3 / votes) - np.square(tile2/votes))
+        std = np.sqrt((tile3/votes) - np.square(tile2/votes))
         mean[good == 0] = self.no_value
         std[good == 0] = self.no_value
         return mean, std, good.astype(np.uint8)
@@ -264,5 +261,23 @@ class DEMSuperResolution:
         self.img_padded = None
         self.rebuildMap()
 
-DSR = DEMSuperResolution(model=gaugan, map_name=map_name, save_path=save_path, folder_path=folder_path, image_size=IMAGE_SIZE, batch_size=BATCH_SIZE, stride=STRIDE)
-DSR.processMap()
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser("Convert OBJ/STL assets to USD")
+    parser.add_argument(
+        "--folder_path", type=str, default=None, help="List of folders to convert (space seperated)."
+    )
+    parser.add_argument(
+        "--save_path", type=str, default=None, help="List of folders to convert (space seperated)."
+    )
+    parser.add_argument(
+        "--map_name", type=str, default=None, help="If specified, directly replaces the already existiing blocks."
+    )
+    parser.add_argument(
+        "--run_name", type=str, default=None, help="If specified, directly replaces the already existiing blocks."
+    )
+    args, unknown_args = parser.parse_known_args()
+
+    save_path = os.path.join(args.save_path,'SR_'+args.map_name)
+    folder_path = os.path.join(args.folder_path,args.map_name,args.run_name+'_map')
+    DSR = DEMSuperResolution(model=gaugan, map_name=args.map_name, save_path=save_path, folder_path=folder_path, image_size=IMAGE_SIZE, batch_size=BATCH_SIZE, stride=STRIDE)
+    DSR.processMap()
