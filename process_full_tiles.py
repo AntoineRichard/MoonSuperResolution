@@ -1,20 +1,19 @@
 from osgeo import gdal
 import numpy as np 
 import argparse
+import pickle
 import cv2 
 import os 
 
-#from matplotlib import pyplot as plt
-
 from spade.models.model import GauGAN
-
-BATCH_SIZE = 16
+BATCH_SIZE = 12
 IMAGE_SIZE = 512
-STRIDE=16
+STRIDE= 64
 gaugan = GauGAN(512, BATCH_SIZE, latent_dim=256)
 gaugan.compile()
 path = '/home/users/arichard/MoonProject/exp_spade/models/20220724-121426/epoch_6/'
 gaugan.load(path+'generator',path+'discriminator',path+'encoder')
+
 
 class DEMSuperResolution:
     def __init__(self, model=lambda x, training=False: x, folder_path=None, map_name=None, save_path=None, image_size=256, stride=64, tile_size=1024, batch_size=64):
@@ -111,35 +110,37 @@ class DEMSuperResolution:
         x = np.linspace(-self.image_size/2, self.image_size/2, self.image_size)
         y = np.linspace(-self.image_size/2, self.image_size/2, self.image_size)
         x, y = np.meshgrid(x, y) # get 2D variables instead of 1D
-        kern = gaus2d(x, y,sx=self.image_size/4,sy=self.image_size/4)
+        kern = gaus2d(x, y,sx=self.image_size/5,sy=self.image_size/5)
         kern = (kern - kern.min())/(kern.max() - kern.min())
         return kern
 
-    def rebuildTile(self, generated_dems, generated_minmax, K):
-        # Generate empty maps
-        votes = np.zeros((self.tile_size + self.image_size*2 - self.stride*2, self.tile_size + self.image_size*2 - self.stride*2), dtype=np.float32)
-        tile = np.zeros((self.tile_size + self.image_size*2 - self.stride*2, self.tile_size + self.image_size*2 - self.stride*2), dtype=np.float32)
-        tile2 = np.zeros((self.tile_size + self.image_size*2 - self.stride*2, self.tile_size + self.image_size*2 - self.stride*2), dtype=np.float32)
-        tile3 = np.zeros((self.tile_size + self.image_size*2 - self.stride*2, self.tile_size + self.image_size*2 - self.stride*2), dtype=np.float32)
-        # Creates gaussian kernel for smooth interpolation
-        w = self.makeGaussianKernel()
-        # Add the elements
+    def rebuildTile(self, generated_dems, generated_minmax):
+        w_sum = np.zeros((self.tile_size + self.image_size*2 - self.stride*2, self.tile_size + self.image_size*2 - self.stride*2), dtype=np.float32)
+        w_sum2 = np.zeros((self.tile_size + self.image_size*2 - self.stride*2, self.tile_size + self.image_size*2 - self.stride*2), dtype=np.float32)
+        mean = np.zeros((self.tile_size + self.image_size*2 - self.stride*2, self.tile_size + self.image_size*2 - self.stride*2), dtype=np.float32)
+        S = np.zeros((self.tile_size + self.image_size*2 - self.stride*2, self.tile_size + self.image_size*2 - self.stride*2), dtype=np.float32)
+        # Gaussian kernel for smooth blending
+        w = self.makeGaussianKernel() + 1e-7
+        purge = 32
+        w = w[purge:-purge,purge:-purge]
+        # Add the elements using the weighted incremental algorithm
         for key in generated_dems.keys():
             dem_patch = generated_dems[key]*(generated_minmax[key][1] - generated_minmax[key][0]) + generated_minmax[key][0]
-            votes[key[1]:key[1] + self.image_size, key[0]:key[0] + self.image_size] += w
-            tile[key[1]:key[1] + self.image_size, key[0]:key[0] + self.image_size] += dem_patch*w
-            tile2[key[1]:key[1] + self.image_size, key[0]:key[0] + self.image_size] += (dem_patch - K)*w
-            tile3[key[1]:key[1] + self.image_size, key[0]:key[0] + self.image_size] += np.square(dem_patch - K)*w
+            dem_patch = dem_patch[purge:-purge,purge:-purge]
+            w_sum[key[1]+purge:key[1] + self.image_size-purge, key[0]+purge:key[0] + self.image_size-purge] += w
+            w_sum2[key[1]+purge:key[1] + self.image_size-purge, key[0]+purge:key[0] + self.image_size-purge] += w**2
+            mean_old = mean[key[1]+purge:key[1] + self.image_size-purge, key[0]+purge:key[0] + self.image_size-purge]
+            mean[key[1]+purge:key[1] + self.image_size-purge, key[0]+purge:key[0] + self.image_size-purge] = mean_old + (w / w_sum[key[1]+purge:key[1] + self.image_size-purge, key[0]+purge:key[0] + self.image_size-purge]) * (dem_patch - mean_old)
+            S[key[1]+purge:key[1] + self.image_size-purge, key[0]+purge:key[0] + self.image_size-purge] += w * (dem_patch - mean_old) * (dem_patch - mean[key[1]+purge:key[1] + self.image_size-purge, key[0]+purge:key[0] + self.image_size-purge])
         # remove padding
-        votes = votes[self.image_size-self.stride:-self.image_size+self.stride, self.image_size-self.stride:-self.image_size+self.stride]
-        tile = tile[self.image_size-self.stride:-self.image_size+self.stride, self.image_size-self.stride:-self.image_size+self.stride]
-        tile2 = tile2[self.image_size-self.stride:-self.image_size+self.stride, self.image_size-self.stride:-self.image_size+self.stride]
-        tile3 = tile3[self.image_size-self.stride:-self.image_size+self.stride, self.image_size-self.stride:-self.image_size+self.stride]
+        w_sum = w_sum[self.image_size-self.stride:-self.image_size+self.stride, self.image_size-self.stride:-self.image_size+self.stride]
+        w_sum2 = w_sum2[self.image_size-self.stride:-self.image_size+self.stride, self.image_size-self.stride:-self.image_size+self.stride]
+        mean = mean[self.image_size-self.stride:-self.image_size+self.stride, self.image_size-self.stride:-self.image_size+self.stride]
+        S = S[self.image_size-self.stride:-self.image_size+self.stride, self.image_size-self.stride:-self.image_size+self.stride]
         # Get the pixels that have been reconstructed
-        good = (votes > 0) * 1.0
+        good = (w_sum > 0) * 1.0
         # Compute the mean and standard deviation
-        mean = (tile / votes)
-        std = np.sqrt((tile3/votes) - np.square(tile2/votes))
+        std = np.sqrt(S / w_sum)
         mean[good == 0] = self.no_value
         std[good == 0] = self.no_value
         return mean, std, good.astype(np.uint8)
@@ -157,8 +158,6 @@ class DEMSuperResolution:
         batch_index = []
         # Get the approximate average of the tile. Used to increase the stability of the standard deviation computation.
         tmp = self.dem_padded[py:py + self.tile_size + self.image_size - self.stride,px:px + self.tile_size + self.image_size - self.stride]
-        K = tmp[tmp > self.no_value].mean()
-        print(K)
         tmp = None
         # The image is padded by (image_size - stride)
         # To build a complete tile we need to go from -(image_size - stride) to (tile_size - stride)
@@ -184,7 +183,7 @@ class DEMSuperResolution:
                 batch.append(np.zeros([self.image_size, self.image_size, 2]))
                 batch_index.append((-1,-1))
             self.processBatch(batch, batch_index, generated_dems)
-        mean, std, good = self.rebuildTile(generated_dems, generated_minmax, K)
+        mean, std, good = self.rebuildTile(generated_dems, generated_minmax)
         self.saveTile(mean, std, good, str(px)+"_"+str(py))
 
     def saveGTiff(self, data:np.ndarray, data_type:int, name:str):
@@ -229,7 +228,6 @@ class DEMSuperResolution:
             for xx in range(0, self.dem_shape[1], self.tile_size):
                 mean[yy:yy+self.tile_size,xx:xx+self.tile_size] = cv2.imread(os.path.join(self.save_path,"tile_"+str(xx)+"_"+str(yy),"tile_"+str(xx)+"_"+str(yy)+"_mean.tif"),-1)
         mean = mean[:-self.pad_y - self.image_size + self.stride,:-self.pad_x - self.image_size + self.stride]
-        tmp_mean = mean[1024:2048, 1024:2048]
         self.saveGTiff(mean, mean.dtype,"mean")
         mean = None
 
