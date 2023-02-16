@@ -28,7 +28,7 @@ To train/run the network, you need to install tensorflow, our code is tested aga
 https://www.tensorflow.org/install
 
 Alternatively, you can check the conda environment we are using to run our code on the UL HPC.\
-To replicate our environment you can run the following commands:\
+To replicate our environment you can run the following commands:
 ```bash
 conda config --set channel_priority strict
 env_name=YOUR_ENVIRONMENT_NAME
