@@ -9,7 +9,6 @@ import os
 
 from spade.models.model import GauGAN
 
-path = '/home/users/arichard/MoonProject/exp_spade/models/20220724-121426/epoch_6/'
 
 def load_GAN_model(path: str, image_size: int, batch_size: int) -> GauGAN:
     """ Creates a SPADE model and loads the model weights provided by the user.
@@ -509,22 +508,8 @@ class DEMSuperResolution:
         return
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser("Convert OBJ/STL assets to USD")
-    parser.add_argument(
-        "--folder_path", type=str, default=None, help="List of folders to convert (space seperated)."
-    )
-    parser.add_argument(
-        "--save_path", type=str, default=None, help="List of folders to convert (space seperated)."
-    )
-    parser.add_argument(
-        "--map_name", type=str, default=None, help="If specified, directly replaces the already existiing blocks."
-    )
-    parser.add_argument(
-        "--run_name", type=str, default=None, help="If specified, directly replaces the already existiing blocks."
-    )
-    args, unknown_args = parser.parse_known_args()
-
-    save_path = os.path.join(args.save_path,'SR_'+args.map_name)
-    folder_path = os.path.join(args.folder_path,args.map_name,args.run_name+'_map')
-    DSR = DEMSuperResolution(model=gaugan, map_name=args.map_name, save_path=save_path, folder_path=folder_path, image_size=IMAGE_SIZE, batch_size=BATCH_SIZE, stride=STRIDE)
+    path = '/home/users/arichard/MoonProject/exp_spade/models/20220724-121426/epoch_6/'
+    DSR_cfg = parse_args()
+    gaugan = load_GAN_model(DSR_cfg.model_path, DSR_cfg.image_size, DSR_cfg.batch_size)
+    DSR = DEMSuperResolution(DSR_cfg, model=gaugan)
     DSR.processMap()
