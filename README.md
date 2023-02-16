@@ -54,7 +54,7 @@ Do not forget to proceed with the setup of the environment variables: (step 7).
 Please make sure you also set-up the ISIS data required to process LRO images:\
 https://github.com/USGS-Astrogeology/ISIS3#the-isis-data-area
 
-If you have a lot of storage you can download this data directly on your drive by running:\
+If you have a lot of storage you can download this data directly on your drive by running:
 ```bash
 downloadIsisData base $ISISDATA
 downloadIsisData lro $ISISDATA
