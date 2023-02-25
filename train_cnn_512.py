@@ -5,7 +5,6 @@ import tensorflow as tf
 import datetime
 from tensorflow.python.keras import backend as K
 
-#from spade import GauGAN
 from spade.models.model import CNNSpade
 from sampler import Sampler, augmentImage, colorize
 
