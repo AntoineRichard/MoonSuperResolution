@@ -18,7 +18,8 @@ from ..losses import (
     DiscriminatorLoss,
     FeatureMatchingLoss,
     VGGFeatureMatchingLoss,
-    ConsistencyLoss
+    ConsistencyLoss,
+    MSE
 )
 
 class GauGAN(Model):
@@ -316,6 +317,215 @@ class GauGAN(Model):
         )
         self.discriminator.load_weights(
             os.path.join(filepath, "discriminator-checkpoints"),
+            by_name=by_name,
+            skip_mismatch=skip_mismatch,
+            options=options,
+        )
+
+class CNNSpade(Model):
+    def __init__(
+        self,
+        image_size: int,
+        batch_size: int,
+        latent_dim:int,
+        vgg_feature_loss_coeff=0.1,
+        kl_divergence_loss_coeff=0.1,
+        consistency_loss_coeff=2,
+        mse_loss_coeff=1,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        self.image_size = image_size
+        self.latent_dim = latent_dim
+        self.batch_size = batch_size
+        self.target_shape = (image_size, image_size, 1)
+        self.source_shape = (image_size, image_size, 2)
+        self.vgg_feature_loss_coeff = vgg_feature_loss_coeff
+        self.kl_divergence_loss_coeff = kl_divergence_loss_coeff
+        self.consistency_loss_coeff = consistency_loss_coeff
+        self.mse_loss_coeff = mse_loss_coeff
+
+        self.generator = build_generator(
+            self.source_shape, latent_dim=self.latent_dim, alpha=0.2
+        )
+        self.encoder = build_encoder(
+            self.source_shape,
+            encoder_downsample_factor=64,
+            latent_dim=self.latent_dim,
+            alpha=0.2,
+            dropout=0.5,
+        )
+        self.sampler = GaussianSampler(batch_size, self.latent_dim)
+
+        self.total_loss_val = tf.keras.metrics.Mean(name="total_loss")
+        self.mse_loss_val = tf.keras.metrics.Mean(name="mse_loss")
+        self.vgg_loss_val = tf.keras.metrics.Mean(name="vgg_loss")
+        self.kl_loss_val = tf.keras.metrics.Mean(name="kl_loss")
+        self.cons_loss_val = tf.keras.metrics.Mean(name="cons_loss")
+
+        self.total_loss_trn = tf.keras.metrics.Mean(name="total_loss")
+        self.mse_loss_trn = tf.keras.metrics.Mean(name="mse_loss")
+        self.vgg_loss_trn = tf.keras.metrics.Mean(name="vgg_loss")
+        self.kl_loss_trn = tf.keras.metrics.Mean(name="kl_loss")
+        self.cons_loss_trn = tf.keras.metrics.Mean(name="cons_loss")
+
+    @property
+    def val_metrics(self):
+        return [
+            self.total_loss_val,
+            self.mse_loss_val,
+            self.vgg_loss_val,
+            self.kl_loss_val,
+            self.cons_loss_val,
+        ]
+    
+    @property
+    def trn_metrics(self):
+        return [
+            self.total_loss_trn,
+            self.mse_loss_trn,
+            self.vgg_loss_trn,
+            self.kl_loss_trn,
+            self.cons_loss_trn,
+        ]
+
+    def compile(self, gen_lr: float = 1e-4, disc_lr: float = 4e-4, **kwargs):
+        super().compile(**kwargs)
+        self.generator_optimizer = optimizers.Adam(gen_lr, beta_1=0.0, beta_2=0.999)
+        self.consistency_loss = ConsistencyLoss()
+        self.vgg_loss = VGGFeatureMatchingLoss()
+        self.mse_loss = MSE()
+
+    def train_generator(
+        self, source, target
+    ):
+        # Generator learns through the signal provided by the discriminator. During
+        # backpropagation, we only update the generator parameters.
+        with tf.GradientTape() as tape:
+            mean, variance = self.encoder(source)
+            latent_vector = self.sampler([mean, variance])
+            fake_image = self.generator([latent_vector, source])
+
+            # Compute generator losses.
+            kl_loss = self.kl_divergence_loss_coeff * kl_divergence_loss(mean, variance)
+            mse_loss = self.mse_loss_coeff * self.mse_loss(fake_image, target)
+            vgg_loss = self.vgg_feature_loss_coeff * self.vgg_loss(tf.repeat(target,3,-1), tf.repeat(fake_image,3,-1))
+            consistency_loss = self.consistency_loss_coeff * self.consistency_loss(fake_image, target)
+            total_loss = kl_loss + vgg_loss + consistency_loss + mse_loss
+
+        all_trainable_variables = (
+            self.generator.trainable_variables + self.encoder.trainable_variables
+        )
+
+        gradients = tape.gradient(total_loss, all_trainable_variables,)
+        self.generator_optimizer.apply_gradients(
+            zip(gradients, all_trainable_variables,)
+        )
+        return total_loss, mse_loss, vgg_loss, kl_loss, consistency_loss, fake_image
+
+    def train_step(self, source, target):
+        (total_loss, mse_loss, vgg_loss, kl_loss, cons_loss, fake_image) = self.train_generator(
+            source, target
+        )
+
+        # Report progress.
+        self.total_loss_trn.update_state(total_loss)
+        self.vgg_loss_trn.update_state(vgg_loss)
+        self.kl_loss_trn.update_state(kl_loss)
+        self.cons_loss_trn.update_state(cons_loss)
+        self.mse_loss_trn.update_state(mse_loss)
+        results = {m.name: m.result() for m in self.trn_metrics}
+        return results, fake_image
+
+    def val_step(self, source, target):
+        # Obtain the learned moments of the real image distribution.
+        mean, variance = self.encoder(source)
+
+        # Sample a latent from the distribution defined by the learned moments.
+        latent_vector = self.sampler([mean, variance])
+
+        # Generate the fake images,
+        fake_images = self.generator([latent_vector, source])
+
+        # Calculate the losses.
+        fake_image = self.generator([latent_vector, source])
+        kl_loss = self.kl_divergence_loss_coeff * kl_divergence_loss(mean, variance)
+        vgg_loss = self.vgg_feature_loss_coeff * self.vgg_loss(tf.repeat(target,3,-1), tf.repeat(fake_images,3,-1))
+        consistency_loss = self.consistency_loss_coeff * self.consistency_loss(fake_image, target)
+        mse_loss = self.mse_loss_coeff * self.mse_loss(fake_image, target)
+        total_generator_loss = kl_loss + vgg_loss + consistency_loss + mse_loss
+
+        # Report progress.
+        self.total_loss_val.update_state(total_generator_loss)
+        self.vgg_loss_val.update_state(vgg_loss)
+        self.kl_loss_val.update_state(kl_loss)
+        self.cons_loss_val.update_state(consistency_loss)
+        self.mse_loss_val.update_state(mse_loss)
+        results = {m.name: m.result() for m in self.val_metrics}
+        return results, fake_images
+
+    def call(self, source):
+        mean, variance = self.encoder(source)
+        latent_vector = self.sampler([mean, variance])
+        return self.generator([latent_vector, source])
+
+    def save(
+        self,
+        filepath,
+        overwrite=True,
+        include_optimizer=True,
+        save_format=None,
+        signatures=None,
+        options=None,
+        save_traces=True,
+    ):
+        self.generator.save(
+            os.path.join(filepath, "generator"),
+            overwrite=overwrite,
+            include_optimizer=include_optimizer,
+            save_format=save_format,
+            signatures=signatures,
+            options=options,
+            save_traces=save_traces,
+        )
+        self.encoder.save(
+            os.path.join(filepath, "encoder"),
+            overwrite=overwrite,
+            include_optimizer=include_optimizer,
+            save_format=save_format,
+            signatures=signatures,
+            options=options,
+            save_traces=save_traces,
+        )
+
+    def load(self, generator_filepath: str, encoder_filepath: str):
+        self.generator = models.load_model(generator_filepath)
+        self.encoder = models.load_model(encoder_filepath)
+
+    def save_weights(self, filepath, overwrite=True, save_format=None, options=None):
+        self.generator.save_weights(
+            os.path.join(filepath, "generator-checkpoints"),
+            overwrite=overwrite,
+            save_format=save_format,
+            options=options,
+        )
+        self.encoder.save_weights(
+            os.path.join(filepath, "encoder-checkpoints"),
+            overwrite=overwrite,
+            save_format=save_format,
+            options=options,
+        )
+
+    def load_weights(self, filepath, by_name=False, skip_mismatch=False, options=None):
+        self.generator.load_weights(
+            os.path.join(filepath, "generator-checkpoints"),
+            by_name=by_name,
+            skip_mismatch=skip_mismatch,
+            options=options,
+        )
+        self.encoder.load_weights(
+            os.path.join(filepath, "encoder-checkpoints"),
             by_name=by_name,
             skip_mismatch=skip_mismatch,
             options=options,

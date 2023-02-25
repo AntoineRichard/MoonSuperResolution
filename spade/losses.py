@@ -20,6 +20,14 @@ class ConsistencyLoss(losses.Loss):
     def call(self, y_true, y_pred):
         return self.mse(self.pool(y_true), self.pool(y_pred))
 
+class MSE(losses.Loss):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.mse = losses.MeanSquaredError()
+
+    def call(self, y_true, y_pred):
+        return self.mse(y_true, y_pred)
+
 
 class FeatureMatchingLoss(losses.Loss):
     def __init__(self, **kwargs):
