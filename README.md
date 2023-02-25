@@ -1,4 +1,6 @@
-# This repository aims at teaching GANs to increase the resolution of Lunar DEMs (Digital Elevation Maps) leveraging satellite imagery (WAC from LRO).
+# Moon Super Resolution
+This repository aims at teaching GANs to increase the resolution of Lunar DEMs (Digital Elevation Maps) leveraging satellite imagery (WAC from LRO).
+
 | Assembled tiles | Zoom on assembled tiles |
 |:-------:|:------:|
 ![alt text](images/SuperResolutionTile.png) | ![alt text](images/SuperResolutionZOOMonTile.png)
