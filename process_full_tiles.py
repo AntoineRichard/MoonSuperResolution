@@ -159,9 +159,8 @@ class DEMSuperResolution:
         self.dem_shape = self.dem.shape
         self.img_shape = self.img.shape
         # Normalizes the ortho-image (the DEMs are instanced normalize later)
-        img_max = np.max(self.img)
-        img_min = np.min(self.img[self.img > self.no_value])
-        self.img = (self.img - img_min) / (img_max - img_min)
+        self.img_max = np.max(self.img)
+        self.img_min = np.min(self.img[self.img > self.no_value])
         return
 
     def padInputs(self) -> None:
@@ -225,7 +224,7 @@ class DEMSuperResolution:
             Tuple[np.ndarray, Tuple[float, float]]]: The normalized, zero-centered, image and dem patches.
                                      And the (min,max) of the DEM before normalization.
         """
-        img_patch_norm = img_patch - 0.5
+        img_patch_norm = ((img_patch - self.img_min) / (self.img_max - self.img_min)) - 0.5
         dem_patch_min_max = (dem_patch.min(), dem_patch.max())
         dem_patch_norm = ((dem_patch - dem_patch.min()) / (dem_patch.max() - dem_patch.min())) - 0.5
         inputs = np.concatenate([np.expand_dims(img_patch_norm, -1), np.expand_dims(dem_patch_norm, -1)], -1)
