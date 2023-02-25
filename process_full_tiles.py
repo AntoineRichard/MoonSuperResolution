@@ -3,7 +3,6 @@ from osgeo import gdal
 import dataclasses
 import numpy as np 
 import argparse
-import pickle
 import cv2 
 import os 
 
@@ -208,9 +207,9 @@ class DEMSuperResolution:
         img_patch = self.img_padded[py:py+self.image_size, px:px+self.image_size]
         dem_patch = self.dem_padded[py:py+self.image_size, px:px+self.image_size]
         # Checks if there are incorrect values inside the dem or image.
-        if (img_patch==self.no_value).any():
+        if (img_patch<=self.no_value).any():
             is_valid = False
-        elif (dem_patch==self.no_value).any():
+        elif (dem_patch<=self.no_value).any():
             is_valid = False
         return is_valid, img_patch, dem_patch
 
@@ -337,6 +336,7 @@ class DEMSuperResolution:
 
     def saveTile(self, mean: np.ndarray, std: np.ndarray, good:np.ndarray, name:str) -> None:
         """ Save the generated tiles.
+
         Args:
             mean (np.ndarray): The mean of the tile to be saved.
             std (np.ndarray): The standard deviation of the tile to be saved.
