@@ -52,11 +52,11 @@ class Sampler:
         raw_dem = raw_dem + random.random()*np.repeat(np.expand_dims(np.arange(self.hw,dtype=np.float32),0),self.hw,0)/(self.hw/2.0)
         raw_dem = (raw_dem*1.0 - raw_dem.min())/(raw_dem.max() - raw_dem.min())
         raw_dem = np.expand_dims(raw_dem - 0.5,-1)
-        smt_ort = cv2.resize(cv2.resize(raw_dem,(self.hw//self.us,self.hw//self.us),cv2.INTER_AREA),(self.hw,self.hw),cv2.INTER_CUBIC)
+        smt_dem = cv2.resize(cv2.resize(raw_dem,(self.hw//self.us,self.hw//self.us),cv2.INTER_AREA),(self.hw,self.hw),cv2.INTER_CUBIC)
         raw_ort = np.expand_dims(raw_ort/255.0 - 0.5,-1)
-        img = np.concatenate([raw_ort,np.expand_dims(smt_ort,-1)],-1)
+        img = np.concatenate([raw_ort,np.expand_dims(smt_dem,-1)],-1)
         assert not np.any(np.isnan(raw_dem))
-        assert not np.any(np.isnan(raw_ort))
+        assert not np.any(np.isnan(img))
         #print(img.shape, raw_dem.shape)
         return img, raw_dem
 
