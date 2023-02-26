@@ -6,7 +6,7 @@ import argparse
 import cv2 
 import os 
 
-from spade.models.model import GauGAN
+from spade.models.model import GauGAN, CNNSpade
 
 
 def load_GAN_model(path: str, image_size: int, batch_size: int) -> GauGAN:
@@ -27,6 +27,26 @@ def load_GAN_model(path: str, image_size: int, batch_size: int) -> GauGAN:
     gaugan = GauGAN(image_size, batch_size, latent_dim=256)
     gaugan.compile()
     gaugan.load(path+'generator',path+'discriminator',path+'encoder')
+    return gaugan
+
+def load_CNN_model(path: str, image_size: int, batch_size: int) -> GauGAN:
+    """ Creates a SPADE model and loads the model weights provided by the user.
+
+    Args:
+        path (str): The path to the weight of the network.
+        image_size (int): The size of the images the network should ingest.
+        batch_size (int): The batch size to be used by the network.
+
+    Returns:
+        TensorFlow-Model: The gan model.
+
+    Raises:
+        assert Ensures the weight path given by the user exists.
+    """
+    assert os.path.exists(path), "The path to the neural-network weight is invalid. Please ensure you gave a valid path."
+    gaugan = CNNSpade(image_size, batch_size, latent_dim=256)
+    gaugan.compile()
+    gaugan.load(path+'generator',path+'encoder')
     return gaugan
 
 @dataclasses.dataclass
@@ -158,9 +178,6 @@ class DEMSuperResolution:
         # Collect shapes
         self.dem_shape = self.dem.shape
         self.img_shape = self.img.shape
-        # Normalizes the ortho-image (the DEMs are instanced normalize later)
-        self.img_max = np.max(self.img)
-        self.img_min = np.min(self.img[self.img > self.no_value])
         return
 
     def padInputs(self) -> None:
@@ -224,7 +241,7 @@ class DEMSuperResolution:
             Tuple[np.ndarray, Tuple[float, float]]]: The normalized, zero-centered, image and dem patches.
                                      And the (min,max) of the DEM before normalization.
         """
-        img_patch_norm = ((img_patch - self.img_min) / (self.img_max - self.img_min)) - 0.5
+        img_patch_norm = ((img_patch - img_patch.min()) / (img_patch.max() - img_patch.min())) - 0.5
         dem_patch_min_max = (dem_patch.min(), dem_patch.max())
         dem_patch_norm = ((dem_patch - dem_patch.min()) / (dem_patch.max() - dem_patch.min())) - 0.5
         inputs = np.concatenate([np.expand_dims(img_patch_norm, -1), np.expand_dims(dem_patch_norm, -1)], -1)
@@ -508,5 +525,6 @@ class DEMSuperResolution:
 if __name__ == '__main__':
     DSR_cfg = parse_args()
     gaugan = load_GAN_model(DSR_cfg.model_path, DSR_cfg.image_size, DSR_cfg.batch_size)
+    #gaugan = load_CNN_model(DSR_cfg.model_path, DSR_cfg.image_size, DSR_cfg.batch_size)
     DSR = DEMSuperResolution(DSR_cfg, model=gaugan)
     DSR.processMap()
