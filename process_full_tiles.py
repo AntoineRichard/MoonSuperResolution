@@ -220,13 +220,22 @@ class DEMSuperResolution:
     def preprocess(self) -> None:
         self.image = self.fillNan(self.image, self.no_value, tile_size=1024, border=128, max_fill_area=8)
         # Downscale by a factor of 4
+        dem_rs = self.dem.copy()
+        # Add nans to prevent openCV from averaging no_values.
+        dem_rs[dem_rs <= self.no_value] = np.nan
         dem_rs = cv2.resize(self.dem, (0,0), fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
+        dem_rs[np.isnan(dem_rs)] = self.no_value
         # Fill nans 
         dem_rs = self.fillNan(dem_rs, self.no_value, tile_size=256, border=32, max_fill_area=24)
         # Downscale by a factor of 4, total downscaling 16.
+        # Add nans to prevent OpenCV from averaging no_values.
+        dem_rs[dem_rs <= self.no_value] = np.nan
         dem_rs = cv2.resize(dem_rs, (0,0), fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
         # Upscale to original size
-        self.dem = cv2.resize(dem_rs, self.dem_shape, interpolation=cv2.INTER_CUBIC)
+        dem_rs = cv2.resize(dem_rs, self.dem_shape, interpolation=cv2.INTER_CUBIC)
+        # Restore no_values.
+        dem_rs[np.isnan(dem_rs)] = self.no_value
+        self.dem = dem_rs
 
     def padInputs(self) -> None:
         """ Pads the initial images to ease the tiling operation.
