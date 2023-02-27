@@ -1,4 +1,5 @@
 from typing import Optional, Tuple, Union, List
+from scipy import interpolate
 from osgeo import gdal
 import dataclasses
 import numpy as np 
@@ -179,6 +180,60 @@ class DEMSuperResolution:
         self.dem_shape = self.dem.shape
         self.img_shape = self.img.shape
         return
+    
+    def interpolateMissingValues(data: np.ndarray, no_value: int, max_fill_area: int = 256):
+        x = np.arange(0, data.shape[1])
+        y = np.arange(0, data.shape[0])
+        invalid_mask = data <= no_value
+        # No missing values
+        if not np.any(invalid_mask):
+            return data
+        # All the values are missing
+        if not np.any(~invalid_mask):
+            return data
+        blobs = cv2.connectedComponents((invalid_mask*255).astype(np.uint8))
+        counts = np.unique(blobs[1], return_counts=True)
+        # Missing values are too large to be interpolated
+        if np.min(counts[1]) > max_fill_area:
+            return data
+        xx, yy = np.meshgrid(x, y)
+        x1 = xx[~invalid_mask]
+        y1 = yy[~invalid_mask]
+        known_values = data[~invalid_mask]
+        interp_image = interpolate.griddata((x1, y1), known_values.ravel(),(xx, yy),method='cubic') 
+        to_keep_mask = np.zeros_like(data, dtype=bool)
+        for id_, count in zip(counts[0], counts[1]):
+            if count < max_fill_area:
+                to_keep_mask[blobs[1] == id_] = True
+        data[to_keep_mask] = interp_image[to_keep_mask]
+        return data
+
+    def fillNan(self, image: np.ndarray, no_value: int, tile_size: int = 1024, border: int = 128, max_fill_area: int = 256) -> np.ndarray:
+        new_image = image.copy()
+        stride = tile_size - border*2
+        for y in range(0, image.shape[0], stride):
+            for x in range(0, image.shape[1], stride):
+                tmp = image[y:y+tile_size, x:x+tile_size]
+                new_image[y+border:y+tile_size-border] = self.interpolateMissingValues(tmp.copy(), no_value, max_fill_area=max_fill_area)[border:-border]
+        return new_image
+    
+    def preprocess(self) -> None:
+        # Downscale by a factor of 5
+        img_rs = cv2.resize(self.img, (0,0), fx=0.2, fy=0.2, interpolation=cv2.INTER_AREA)
+        # Fill nans 
+        img_rs = self.fillNan(img_rs, self.no_value, tile_size=256, border=32, max_fill_area=64)
+        # Downscale by a factor of 2
+        img_rs = cv2.resize(img_rs, (0,0), fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+        # Upscale to original size
+        self.image = cv2.resize(img_rs, self.img_shape, interpolation=cv2.INTER_CUBIC)
+        # Downscale by a factor of 5
+        dem_rs = cv2.resize(self.dem, (0,0), fx=0.2, fy=0.2, interpolation=cv2.INTER_AREA)
+        # Fill nans 
+        dem_rs = self.fillNan(dem_rs, self.no_value, tile_size=256, border=32, max_fill_area=64)
+        # Downscale by a factor of 2
+        dem_rs = cv2.resize(dem_rs, (0,0), fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+        # Upscale to original size
+        self.dem = cv2.resize(dem_rs, self.dem_shape, interpolation=cv2.INTER_CUBIC)
 
     def padInputs(self) -> None:
         """ Pads the initial images to ease the tiling operation.
@@ -507,6 +562,7 @@ class DEMSuperResolution:
         """
         # Loads and prepares the data.
         self.loadImages()
+        self.preprocess()
         self.padInputs()
         # Gets the list of tiles to process.
         tile_list = self.generateTileList()
