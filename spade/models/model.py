@@ -129,8 +129,7 @@ class GauGAN_no_KL(Model):
 
     def train_discriminator(self, source, target):
         mean, variance = self.encoder(source)
-        latent_vector = self.sampler([mean, variance])
-        fake_images = self.generator([latent_vector, source])
+        fake_images = self.generator([mean + variance, source])
         with tf.GradientTape() as gradient_tape:
             pred_fake = self.discriminator([source, fake_images])[-1]
             pred_real = self.discriminator([source, target])[-1]
@@ -155,10 +154,9 @@ class GauGAN_no_KL(Model):
         self.discriminator.trainable = False
         with tf.GradientTape() as tape:
             mean, variance = self.encoder(source)
-            latent_vector = self.sampler([mean, variance])
             real_d_output = self.discriminator([source, target])
             fake_d_output, fake_image = self.combined_model(
-                [latent_vector, source]
+                [mean + variance, source]
             )
             pred = fake_d_output[-1]
 
@@ -203,10 +201,8 @@ class GauGAN_no_KL(Model):
         mean, variance = self.encoder(source)
 
         # Sample a latent from the distribution defined by the learned moments.
-        latent_vector = self.sampler([mean, variance])
-
         # Generate the fake images,
-        fake_images = self.generator([latent_vector, source])
+        fake_images = self.generator([mean + variance, source])
 
         # Calculate the losses.
         pred_fake = self.discriminator([source, fake_images])[-1]
@@ -216,7 +212,7 @@ class GauGAN_no_KL(Model):
         total_discriminator_loss = 0.5 * (loss_fake + loss_real)
         real_d_output = self.discriminator([source, target])
         fake_d_output, fake_image = self.combined_model(
-            [latent_vector, source]
+            [mean + variance, source]
         )
         pred = fake_d_output[-1]
         g_loss = generator_loss(pred)
@@ -238,8 +234,7 @@ class GauGAN_no_KL(Model):
 
     def call(self, source):
         mean, variance = self.encoder(source)
-        latent_vector = self.sampler([mean, variance])
-        return self.generator([latent_vector, source])
+        return self.generator([mean + variance, source])
 
     def save(
         self,
