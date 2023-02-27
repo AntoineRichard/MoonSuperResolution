@@ -222,7 +222,7 @@ class DEMSuperResolution:
         # Downscale by a factor of 4
         dem_rs = cv2.resize(self.dem, (0,0), fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
         # Fill nans 
-        dem_rs = self.fillNan(dem_rs, self.no_value, tile_size=256, border=32, max_fill_area=8)
+        dem_rs = self.fillNan(dem_rs, self.no_value, tile_size=256, border=32, max_fill_area=24)
         # Downscale by a factor of 4, total downscaling 16.
         dem_rs = cv2.resize(dem_rs, (0,0), fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
         # Upscale to original size
