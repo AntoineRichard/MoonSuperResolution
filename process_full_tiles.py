@@ -218,20 +218,13 @@ class DEMSuperResolution:
         return new_image
     
     def preprocess(self) -> None:
-        # Downscale by a factor of 5
-        img_rs = cv2.resize(self.img, (0,0), fx=0.2, fy=0.2, interpolation=cv2.INTER_AREA)
+        self.image = self.fillNan(self.image, self.no_value, tile_size=1024, border=128, max_fill_area=8)
+        # Downscale by a factor of 4
+        dem_rs = cv2.resize(self.dem, (0,0), fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
         # Fill nans 
-        img_rs = self.fillNan(img_rs, self.no_value, tile_size=256, border=32, max_fill_area=64)
-        # Downscale by a factor of 2
-        img_rs = cv2.resize(img_rs, (0,0), fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
-        # Upscale to original size
-        self.image = cv2.resize(img_rs, self.img_shape, interpolation=cv2.INTER_CUBIC)
-        # Downscale by a factor of 5
-        dem_rs = cv2.resize(self.dem, (0,0), fx=0.2, fy=0.2, interpolation=cv2.INTER_AREA)
-        # Fill nans 
-        dem_rs = self.fillNan(dem_rs, self.no_value, tile_size=256, border=32, max_fill_area=64)
-        # Downscale by a factor of 2
-        dem_rs = cv2.resize(dem_rs, (0,0), fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+        dem_rs = self.fillNan(dem_rs, self.no_value, tile_size=256, border=32, max_fill_area=8)
+        # Downscale by a factor of 4, total downscaling 16.
+        dem_rs = cv2.resize(dem_rs, (0,0), fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
         # Upscale to original size
         self.dem = cv2.resize(dem_rs, self.dem_shape, interpolation=cv2.INTER_CUBIC)
 
