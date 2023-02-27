@@ -31,6 +31,7 @@ class GauGAN_no_KL(Model):
         feature_loss_coeff=10,
         vgg_feature_loss_coeff=0.1,
         consistency_loss_coeff=2,
+        upscaling_factor=16,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -43,6 +44,7 @@ class GauGAN_no_KL(Model):
         self.feature_loss_coeff = feature_loss_coeff
         self.vgg_feature_loss_coeff = vgg_feature_loss_coeff
         self.consistency_loss_coeff = consistency_loss_coeff
+        self.upscaling_factor = upscaling_factor
 
         self.discriminator = build_discriminator(
             self.source_shape,
@@ -122,7 +124,7 @@ class GauGAN_no_KL(Model):
         self.discriminator_optimizer = optimizers.Adam(
             disc_lr, beta_1=0.0, beta_2=0.999
         )
-        self.consistency_loss = ConsistencyLoss()
+        self.consistency_loss = ConsistencyLoss(upscaling=self.upscaling_factor)
         self.discriminator_loss = DiscriminatorLoss()
         self.feature_matching_loss = FeatureMatchingLoss()
         self.vgg_loss = VGGFeatureMatchingLoss()

@@ -181,20 +181,23 @@ class DEMSuperResolution:
         self.img_shape = self.img.shape
         return
     
-    def interpolateMissingValues(data: np.ndarray, no_value: int, max_fill_area: int = 256):
+    def interpolateMissingValues(self, data: np.ndarray, no_value: int, max_fill_area: int = 256):
         x = np.arange(0, data.shape[1])
         y = np.arange(0, data.shape[0])
         invalid_mask = data <= no_value
         # No missing values
         if not np.any(invalid_mask):
+            print("no missing values")
             return data
         # All the values are missing
         if not np.any(~invalid_mask):
+            print("all values are missing")
             return data
         blobs = cv2.connectedComponents((invalid_mask*255).astype(np.uint8))
         counts = np.unique(blobs[1], return_counts=True)
         # Missing values are too large to be interpolated
         if np.min(counts[1]) > max_fill_area:
+            print("area is too large")
             return data
         xx, yy = np.meshgrid(x, y)
         x1 = xx[~invalid_mask]
@@ -212,13 +215,16 @@ class DEMSuperResolution:
         new_image = image.copy()
         stride = tile_size - border*2
         for y in range(0, image.shape[0], stride):
+            ymax = min(y+tile_size-border, image.shape[0]-border)
             for x in range(0, image.shape[1], stride):
+                print(x,y)
                 tmp = image[y:y+tile_size, x:x+tile_size]
-                new_image[y+border:y+tile_size-border] = self.interpolateMissingValues(tmp.copy(), no_value, max_fill_area=max_fill_area)[border:-border]
+                xmax = min(x+tile_size-border,image.shape[1]-border)
+                new_image[y+border:ymax,x+border:xmax] = self.interpolateMissingValues(tmp.copy(), no_value, max_fill_area=max_fill_area)[border:-border,border:-border]
         return new_image
     
     def preprocess(self) -> None:
-        self.image = self.fillNan(self.image, self.no_value, tile_size=1024, border=128, max_fill_area=8)
+        self.image = self.fillNan(self.img, self.no_value, tile_size=1024, border=128, max_fill_area=8)
         # Downscale by a factor of 4
         dem_rs = self.dem.copy()
         # Add nans to prevent openCV from averaging no_values.
