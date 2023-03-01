@@ -5,10 +5,22 @@ from tensorflow.keras import losses, applications, Model
 def generator_loss(y):
     return -tf.reduce_mean(y)
 
-
 def kl_divergence_loss(mean, variance):
     return -0.5 * tf.reduce_sum(1 + variance - tf.square(mean) - tf.exp(variance))
 
+def gradient_loss(y_true, y_pred):
+    gx_true, gy_true = tf.image.image_gradients(y_true)
+    gx_pred, gy_pred = tf.image.image_gradients(y_pred)
+    return tf.reduce_mean(tf.abs(gx_true - gx_pred) + tf.abs(gy_true - gy_pred))
+
+def normal_loss(y_true, y_pred):
+    gx_true, gy_true = tf.image.image_gradients(y_true)
+    gx_pred, gy_pred = tf.image.image_gradients(y_pred)
+    one = tf.ones_like(gx_true)
+    n_true = tf.concat([-gx_true, -gy_true, one],axis=-1)
+    n_pred = tf.concat([-gx_pred, -gy_pred, one],axis=-1)
+    normal_error = (tf.reduce_sum(tf.multiply(n_pred, n_true),-1)) / (tf.sqrt(tf.reduce_sum(tf.multiply(n_true, n_true),-1))*tf.sqrt(tf.reduce_sum(tf.multiply(n_pred, n_pred),-1)))
+    return tf.reduce_mean(1 - normal_error)
 
 class ConsistencyLoss(losses.Loss):
     def __init__(self, upscaling=10, **kwargs):
